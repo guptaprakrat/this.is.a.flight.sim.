@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Simulator - v2.1.0</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.103/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.103/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: white;
+            overflow: hidden;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px;
+            font-size: 2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #00d4ff;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #00d4ff;
+            border-radius: 10px;
+            padding: 20px;
+            width: 300px;
+            text-align: center;
+            box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+        }
+
+        .card:hover {
+            transform: scale(1.05);
+            transition: transform 0.3s;
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #00d4ff;
+        }
+
+        .card button {
+            background: #00d4ff;
+            color: #0f2027;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .card button:hover {
+            background: #00a3cc;
+        }
+
+        #previewContainer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 50%;
+            background: rgba(0, 0, 0, 0.8);
+            border-top: 2px solid #00d4ff;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding-top: 20px; /* Add padding to push the Start button higher */
+        }
+
+        #previewContainer canvas {
+            width: 100%;
+            height: 80%; /* Reduce canvas height to make space for the button */
+        }
+
+        #startButton {
+            margin-top: 10px; /* Adjust spacing */
+            background: #00d4ff;
+            color: #0f2027;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #startButton:hover {
+            background: #00a3cc;
+        }
+    </style>
+</head>
+<body>
+    <header>Select Your Aircraft</header>
+    <div class="container">
+        <div class="card">
+            <h2>Typhoon</h2>
+            <button onclick="previewModel('typhoon.glb', 'typhoon.html')">Preview</button>
+        </div>
+        <div class="card">
+            <h2>F-18</h2>
+            <button onclick="previewModel('fighter1.glb', 'f18.html')">Preview</button>
+        </div>
+        <div class="card">
+            <h2>Suhkoi</h2>
+            <button onclick="previewModel('suhkoi.glb', 'suhkoi.html')">Preview</button>
+        </div>
+        <div class="card">
+            <h2>F-15</h2>
+            <button onclick="previewModel('f15.glb', 'f15.html')">Preview</button>
+        </div>
+        <div class="card">
+            <h2>Dassault Rafale</h2>
+            <button onclick="previewModel('dassault_rafale.glb', 'rafale.html')">Preview</button>
+        </div>
+        <div class="card">
+            <h2>F-22</h2>
+            <button onclick="previewModel('f22.glb', 'f22.html')">Preview</button>
+        </div>
+        <div class="card">
+            <h2>Mig-29</h2>
+            <button onclick="previewModel('mig_29.glb', 'mig29.html')">Preview</button>
+        </div>
+    </div>
+
+    <div id="previewContainer">
+        <div id="cesiumContainer" style="width: 100%; height: 80%;"></div>
+        <button id="startButton" onclick="startGame()">Start Game</button>
+    </div>
+
+    <script>
+        let selectedModel = null;
+        let redirectTo = null;
+
+        // Initialize Cesium Viewer
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: Cesium.createWorldTerrain(),
+            animation: false,
+            timeline: false,
+            sceneModePicker: false,
+            baseLayerPicker: false,
+            geocoder: false,
+            homeButton: false,
+            infoBox: false,
+            navigationHelpButton: false,
+            selectionIndicator: false
+        });
+
+        const scene = viewer.scene;
+        let modelEntity = null;
+
+        // Show the preview of the selected model
+        function previewModel(modelFile, redirectPage) {
+            selectedModel = modelFile;
+            redirectTo = redirectPage;
+
+            // Remove existing model if any
+            if (modelEntity) {
+                viewer.entities.remove(modelEntity);
+            }
+
+            // Add the selected model
+            modelEntity = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(-122.3754167, 37.6188056, 100), // Example position
+                model: {
+                    uri: modelFile,
+                    scale: 0.5 // Adjust the scale for preview
+                }
+            });
+
+            // Fly to the model
+            viewer.flyTo(modelEntity);
+
+            // Show the preview container
+            document.getElementById('previewContainer').style.display = 'flex';
+        }
+
+        // Start the game with the selected model
+        function startGame() {
+            if (!redirectTo) {
+                alert('Please select an aircraft first!');
+                return;
+            }
+
+            // Redirect to the respective game HTML file
+            window.location.href = redirectTo;
+        }
+    </script>
+</body>
+</html>

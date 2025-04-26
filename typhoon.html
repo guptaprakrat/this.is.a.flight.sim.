@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fighter Jet with Wing Vapor</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.103/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.103/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #hud div {
+            margin-bottom: 5px;
+        }
+
+        #hud span {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="hud">
+        <div>Speed: <span id="hud-speed">0</span> m/s</div>
+        <div>Altitude: <span id="hud-altitude">0</span> m</div>
+        <div>Heading: <span id="hud-heading">0</span>°</div>
+        <div>Position: <span id="hud-position">0, 0</span></div>
+        <div>Camera Mode: <span id="camera-mode">Follow</span></div>
+    </div>
+    <script>
+        // Set your Cesium Ion access token
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5ZjM5NDgwZi04NmFhLTQ0ZmUtOTVmMC00NzEyNWRlYTczZGMiLCJpZCI6MjYzNDIyLCJpYXQiOjE3MzQ1NDE2NjZ9.n4QU-yEnla-yvYm9ZyCnewFwHebwFOvPF_ElrW1ANOQ'; // Replace with your Cesium Ion access token
+
+        // Initialize Cesium Viewer
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: Cesium.createWorldTerrain(),
+            animation: false,
+            timeline: false,
+            sceneModePicker: false
+        });
+
+        const scene = viewer.scene;
+
+        // Enable depth testing against terrain
+        scene.globe.depthTestAgainstTerrain = true;
+
+        // Add the 3D model (Player's fighter jet)
+        const modelPosition = Cesium.Cartesian3.fromDegrees(-122.3754167, 37.6188056, 3); // Altitude: 3 meters
+        const modelEntity = viewer.entities.add({
+            name: "Player Fighter Jet",
+            position: modelPosition,
+            orientation: Cesium.Transforms.headingPitchRollQuaternion(
+                modelPosition,
+                new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(120), 0, 0) // Aligned with runway direction
+            ),
+            model: {
+                uri: 'typhoon.glb',
+                minimumPixelSize: 64,
+                maximumScale: 200
+            }
+        });
+
+        // Player jet parameters
+        let pitch = 0; // Pitch in radians
+        let roll = 0;  // Roll in radians
+        let heading = Cesium.Math.toRadians(120); // Heading aligned with runway direction
+        let position = Cesium.Cartesian3.clone(modelPosition);
+
+        // Movement parameters
+        const forwardSpeed = 10; // Forward movement in meters per tick
+        const rotationStep = Cesium.Math.toRadians(1); // Rotation step in radians
+        const vaporThreshold = Cesium.Math.toRadians(20); // Minimum pitch/roll angle for vapor to appear
+
+        // HUD elements
+        const hudSpeed = document.getElementById('hud-speed');
+        const hudAltitude = document.getElementById('hud-altitude');
+        const hudHeading = document.getElementById('hud-heading');
+        const hudPosition = document.getElementById('hud-position');
+        const cameraModeDisplay = document.getElementById('camera-mode');
+
+        // Track whether the camera is in "follow mode"
+        let isCameraFollowing = true;
+
+        // Object to track pressed keys
+        const keysPressed = {};
+
+        // Listen for keydown events
+        document.addEventListener('keydown', (event) => {
+            keysPressed[event.key.toLowerCase()] = true; // Track pressed keys
+            if (event.key.toLowerCase() === 'f') {
+                // Toggle follow mode
+                isCameraFollowing = !isCameraFollowing;
+                cameraModeDisplay.textContent = isCameraFollowing ? "Follow" : "Orbit";
+            }
+        });
+
+        // Listen for keyup events
+        document.addEventListener('keyup', (event) => {
+            keysPressed[event.key.toLowerCase()] = false; // Track released keys
+        });
+
+        // Add wing vapor particle systems
+        const leftWingVapor = new Cesium.ParticleSystem({
+            image: undefined, // Use Cesium's default circular particle
+            startColor: Cesium.Color.WHITE.withAlpha(0.7),
+            endColor: Cesium.Color.WHITE.withAlpha(0.0),
+            startScale: 1.0,
+            endScale: 3.0,
+            minimumParticleLife: 0.5,
+            maximumParticleLife: 1.0,
+            speed: 5.0,
+            imageSize: new Cesium.Cartesian2(10, 10),
+            emissionRate: 50,
+            lifetime: 16.0,
+            emitter: new Cesium.CircleEmitter(0.5)
+        });
+
+        const rightWingVapor = new Cesium.ParticleSystem({
+            image: undefined, // Use Cesium's default circular particle
+            startColor: Cesium.Color.WHITE.withAlpha(0.7),
+            endColor: Cesium.Color.WHITE.withAlpha(0.0),
+            startScale: 1.0,
+            endScale: 3.0,
+            minimumParticleLife: 0.5,
+            maximumParticleLife: 1.0,
+            speed: 5.0,
+            imageSize: new Cesium.Cartesian2(10, 10),
+            emissionRate: 50,
+            lifetime: 16.0,
+            emitter: new Cesium.CircleEmitter(0.5)
+        });
+
+        scene.primitives.add(leftWingVapor);
+        scene.primitives.add(rightWingVapor);
+
+        // Function to calculate the forward direction vector based on heading, pitch, and roll
+        function getForwardVector(heading, pitch, roll) {
+            const matrix = Cesium.Transforms.headingPitchRollToFixedFrame(
+                position,
+                new Cesium.HeadingPitchRoll(heading, pitch, roll)
+            );
+            const forward = Cesium.Matrix4.multiplyByPointAsVector(
+                matrix,
+                new Cesium.Cartesian3(0, 1, 0), // Forward direction in local space
+                new Cesium.Cartesian3()
+            );
+            return Cesium.Cartesian3.normalize(forward, new Cesium.Cartesian3());
+        }
+
+        // Function to update the model's position and orientation
+        function updateModel() {
+            // Handle multiple key presses for movement and control
+            if (keysPressed['w']) { // Move forward
+                const forwardVector = getForwardVector(heading, pitch, roll);
+                const scaledForward = Cesium.Cartesian3.multiplyByScalar(
+                    forwardVector,
+                    forwardSpeed,
+                    new Cesium.Cartesian3()
+                );
+                position = Cesium.Cartesian3.add(position, scaledForward, new Cesium.Cartesian3());
+            }
+
+            if (keysPressed['arrowup']) { // Pitch up
+                pitch -= rotationStep;
+            }
+            if (keysPressed['arrowdown']) { // Pitch down
+                pitch += rotationStep;
+            }
+            if (keysPressed['arrowleft']) { // Yaw left (change heading)
+                heading -= rotationStep;
+            }
+            if (keysPressed['arrowright']) { // Yaw right (change heading)
+                heading += rotationStep;
+            }
+            if (keysPressed['a']) { // Roll left
+                roll -= rotationStep;
+            }
+            if (keysPressed['d']) { // Roll right
+                roll += rotationStep;
+            }
+
+            // Update orientation based on pitch, roll, and heading
+            const hpr = new Cesium.HeadingPitchRoll(heading, pitch, roll);
+            modelEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(
+                modelEntity.position.getValue(Cesium.JulianDate.now()),
+                hpr
+            );
+
+            // Update position
+            modelEntity.position = position;
+
+            // Update camera
+            if (isCameraFollowing) {
+                viewer.camera.lookAt(position, new Cesium.Cartesian3(0, 0, 50));
+            }
+
+            // Update wing vapor systems
+            const showVapor = Math.abs(pitch) > vaporThreshold || Math.abs(roll) > vaporThreshold; // Vapor appears during steep climbs or sharp turns
+            leftWingVapor.show = showVapor;
+            rightWingVapor.show = showVapor;
+
+            leftWingVapor.modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(
+                Cesium.Cartesian3.add(position, new Cesium.Cartesian3(-2, 0, 0), new Cesium.Cartesian3()),
+                new Cesium.HeadingPitchRoll(heading, pitch, roll)
+            );
+
+            rightWingVapor.modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(
+                Cesium.Cartesian3.add(position, new Cesium.Cartesian3(2, 0, 0), new Cesium.Cartesian3()),
+                new Cesium.HeadingPitchRoll(heading, pitch, roll)
+            );
+        }
+
+        // Main update loop
+        function gameLoop() {
+            updateModel();
+            requestAnimationFrame(gameLoop); // Continuously loop
+        }
+
+        // Start the game loop
+        gameLoop();
+    </script>
+</body>
+</html>

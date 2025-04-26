@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fighter Jet with Corrected Movement</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.103/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.103/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #hud div {
+            margin-bottom: 5px;
+        }
+
+        #hud span {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="hud">
+        <div>Speed: <span id="hud-speed">0</span> m/s</div>
+        <div>Altitude: <span id="hud-altitude">0</span> m</div>
+        <div>Heading: <span id="hud-heading">0</span>°</div>
+        <div>Position: <span id="hud-position">0, 0</span></div>
+        <div>Camera Mode: <span id="camera-mode">Follow</span></div>
+    </div>
+    <script>
+        // Set your Cesium Ion access token
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5ZjM5NDgwZi04NmFhLTQ0ZmUtOTVmMC00NzEyNWRlYTczZGMiLCJpZCI6MjYzNDIyLCJpYXQiOjE3MzQ1NDE2NjZ9.n4QU-yEnla-yvYm9ZyCnewFwHebwFOvPF_ElrW1ANOQ';
+
+        // Initialize Cesium Viewer
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: Cesium.createWorldTerrain(),
+            animation: false,
+            timeline: false,
+            sceneModePicker: false
+        });
+
+        const scene = viewer.scene;
+
+        // Enable depth testing against terrain
+        scene.globe.depthTestAgainstTerrain = true;
+
+        // Add the 3D model (Player's fighter jet)
+        const modelPosition = Cesium.Cartesian3.fromDegrees(-122.3754167, 37.6188056, 3); // Altitude: 3 meters
+
+        // Custom rotation to align the model's forward direction with Cesium's system
+        const initialModelRotation = Cesium.Transforms.headingPitchRollQuaternion(
+            modelPosition,
+            new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(120), 0, Cesium.Math.toRadians(-90)) // Adjust roll by -90 degrees
+        );
+
+        const modelEntity = viewer.entities.add({
+            name: "Player Fighter Jet",
+            position: modelPosition,
+            orientation: initialModelRotation,
+            model: {
+                uri: 'suhkoi.glb',
+                minimumPixelSize: 64,
+                maximumScale: 200
+            }
+        });
+
+        // Player jet parameters
+        let pitch = 0; // Pitch in radians
+        let roll = Cesium.Math.toRadians(-90); // Roll correction for model alignment
+        let heading = Cesium.Math.toRadians(120); // Heading aligned with runway direction
+        let position = Cesium.Cartesian3.clone(modelPosition);
+
+        // Movement parameters
+        const forwardSpeed = 10; // Forward movement in meters per tick
+        const rotationStep = Cesium.Math.toRadians(1); // Rotation step in radians
+
+        // HUD elements
+        const hudSpeed = document.getElementById('hud-speed');
+        const hudAltitude = document.getElementById('hud-altitude');
+        const hudHeading = document.getElementById('hud-heading');
+        const hudPosition = document.getElementById('hud-position');
+
+        // Object to track pressed keys
+        const keysPressed = {};
+
+        // Listen for keydown events
+        document.addEventListener('keydown', (event) => {
+            keysPressed[event.key.toLowerCase()] = true; // Track pressed keys
+        });
+
+        // Listen for keyup events
+        document.addEventListener('keyup', (event) => {
+            keysPressed[event.key.toLowerCase()] = false; // Track released keys
+        });
+
+        // Function to calculate the forward direction vector based on heading, pitch, and roll
+        function getForwardVector(heading, pitch, roll) {
+            const hpr = new Cesium.HeadingPitchRoll(heading, pitch, roll);
+            const transformMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(position, hpr);
+            const forward = Cesium.Cartesian3.fromElements(1, 0, 0); // Align with the X-axis (model forward)
+            return Cesium.Matrix4.multiplyByPointAsVector(
+                transformMatrix,
+                forward,
+                new Cesium.Cartesian3()
+            );
+        }
+
+        // Function to update the model's position and orientation
+        function updateModel() {
+            // Handle multiple key presses for movement and control
+            if (keysPressed['w']) { // Move forward
+                const forwardVector = getForwardVector(heading, pitch, roll);
+                const scaledForward = Cesium.Cartesian3.multiplyByScalar(
+                    forwardVector,
+                    forwardSpeed,
+                    new Cesium.Cartesian3()
+                );
+                position = Cesium.Cartesian3.add(position, scaledForward, new Cesium.Cartesian3());
+            }
+
+            if (keysPressed['arrowup']) { // Pitch up
+                pitch -= rotationStep;
+            }
+            if (keysPressed['arrowdown']) { // Pitch down
+                pitch += rotationStep;
+            }
+            if (keysPressed['arrowleft']) { // Yaw left (change heading)
+                heading -= rotationStep;
+            }
+            if (keysPressed['arrowright']) { // Yaw right (change heading)
+                heading += rotationStep;
+            }
+            if (keysPressed['a']) { // Roll left
+                roll -= rotationStep;
+            }
+            if (keysPressed['d']) { // Roll right
+                roll += rotationStep;
+            }
+
+            // Update orientation based on pitch, roll, and heading
+            const hpr = new Cesium.HeadingPitchRoll(heading, pitch, roll);
+            modelEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(
+                position,
+                hpr
+            );
+
+            // Update position
+            modelEntity.position = position;
+
+            // Update HUD
+            const cartographic = Cesium.Cartographic.fromCartesian(position);
+            hudSpeed.textContent = forwardSpeed.toFixed(2);
+            hudAltitude.textContent = `${cartographic.height.toFixed(2)} m`;
+            hudHeading.textContent = `${Cesium.Math.toDegrees(heading).toFixed(2)}°`;
+            hudPosition.textContent = `(${Cesium.Math.toDegrees(cartographic.longitude).toFixed(6)}, ${Cesium.Math.toDegrees(cartographic.latitude).toFixed(6)})`;
+        }
+
+        // Main update loop
+        function gameLoop() {
+            updateModel();
+            requestAnimationFrame(gameLoop); // Continuously loop
+        }
+
+        // Start the game loop
+        gameLoop();
+    </script>
+</body>
+</html>
