@@ -11,3 +11,4 @@ To run this flight sim, there are several ways. Here is the first way:
    You have succeefully set up the flight sim. Now, the controls.
 
    ## Controls
+For camera, press "F" and then double click the model for free mode, which will also follow the plane as u go.
