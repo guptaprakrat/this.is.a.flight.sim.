@@ -1,3 +1,4 @@
+### I am the alt for redlarvaoioi, therefore this fork is verified.
 ### PLEASE DO NOT FORK THIS REPO
 This is a Cesium based Flight Sim that can run in a web browser with little to no lag.
 To run this flight sim, there are several ways. Here is the first way:
